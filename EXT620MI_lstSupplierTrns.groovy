@@ -6,15 +6,17 @@ public class lstSupplierTrns extends ExtendM3Transaction {
   private final MIAPI mi;
   private final DatabaseAPI database;
   private final ProgramAPI program;
+  private final LoggerAPI logger;
   private final List<Map<String, String>> resultRecords = new ArrayList<>();
   private final Map<String, Double> openingBalances = new HashMap<>();
   private final Map<String, Double> openingDebits = new HashMap<>();
   private final Map<String, Double> openingCredits = new HashMap<>();
 
-  public lstSupplierTrns(MIAPI mi, DatabaseAPI database, ProgramAPI program) {
+  public lstSupplierTrns(MIAPI mi, DatabaseAPI database, ProgramAPI program, LoggerAPI logger) {
     this.mi = mi;
     this.database = database;
     this.program = program;
+    this.logger = logger;
   }
   
   public void main() {
@@ -77,7 +79,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
       
       if (joinWithFGLEDG(record, cono)) {
         String dbcr = record.get("DBCR");
-        double cuam = parseAmount(record.get("CUAM"));
+        double cuam = Math.abs(parseAmount(record.get("CUAM")));//Yael add Math.abs() 06.11.2025. It was in createBaseRecord but I canceled it.
         String key = recordSpyn + "_" + recordSuno;
         
         if ("D".equals(dbcr)) {
@@ -121,12 +123,14 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     fpledgQuery.readAll(fpledgContainer, 0, { DBContainer fpRecord ->
       Map<String, String> record = createBaseRecord(fpRecord);
       if (joinWithFGLEDG(record, cono)) {
-        joinWithFPLEDX(record, cono, "409");
-        joinWithFPLEDX(record, cono, "406");
-        joinWithFPLEDX(record, cono, "450");
+        String trcd = record.get("TRCD");//Yael 06/11/2025.
+          joinWithFPLEDX(record, cono, "409");
+          joinWithFPLEDX(record, cono, "406");
+          joinWithFPLEDX(record, cono, "450");
+          joinWithFPLEDX(record, cono, "404");//Yael 04/11/2025.
         joinWithCSYNBV(record, cono);
-        joinWithFAPCHK(record, cono);
-        joinWithCSYTAB(record, cono, suno);
+        //joinWithFAPCHK(record, cono);//Yael 04/11/2025.
+        //joinWithCSYTAB(record, cono, suno);//Yael 04/11/2025.
         calculateDebitCredit(record);
         setAsmakhtaValues(record);
         resultRecords.add(record);
@@ -145,7 +149,8 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     record.put("ACDT", String.valueOf(fpRecord.get("EPACDT")));
     record.put("DUDT", String.valueOf(fpRecord.get("EPDUDT")));
     double cuam = (Double)fpRecord.get("EPCUAM");
-    record.put("CUAM", formatAmount(Math.abs(cuam)));
+    //record.put("CUAM", formatAmount(Math.abs(cuam)));
+    record.put("CUAM", formatAmount(cuam));//Yael remove Math.abs(cuam) 04/11/2025
     record.put("TRCD", String.valueOf(fpRecord.get("EPTRCD")));
     record.put("YEA4", String.valueOf(fpRecord.get("EPYEA4")));
     record.put("JRNO", String.valueOf(fpRecord.get("EPJRNO")));
@@ -166,7 +171,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     record.put("CUCD", "");
     record.put("ASM1", ""); 
     record.put("ASM2", ""); 
-    record.put("TX40", "");
+    //record.put("TX40", "");//Yael 04/11/2025
     record.put("IVDT", String.valueOf(fpRecord.get("EPIVDT")));
     return record;
   }
@@ -187,7 +192,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     DBAction fgledgQuery = database.table("FGLEDG")
       .index("00")
       .matching(fgledgExp)
-      .selection("EGACAM", "EGTCAM", "EGDBCR", "EGCUCD", "EGFEID", "EGFNCN", "EGVTXT")
+      .selection("EGACAM", "EGTCAM", "EGDBCR", "EGCUCD", "EGFEID", "EGFNCN", "EGVTXT", "EGVDSC")
       .build();
     DBContainer fgledgContainer = fgledgQuery.getContainer();
     final boolean[] found = [false];
@@ -195,7 +200,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
       String feid = String.valueOf(fgRecord.get("EGFEID"));
       String fncn = String.valueOf(fgRecord.get("EGFNCN"));
       boolean isValid = false;
-      if ("40".equals(trcd) && "AP10".equals(feid)) {
+      if ("40".equals(trcd) && ("AP10".equals(feid) || "AP50".equals(feid))) {//Yael add || "AP50".equals(feid). 04/11/2025
         isValid = true;
       } else if ("40".equals(trcd) && ("AP".equals(ivtp) || "PR".equals(ivtp))) {
         isValid = true;
@@ -212,6 +217,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
         record.put("FEID", feid);
         record.put("FNCN", fncn);
         record.put("VTXT", String.valueOf(fgRecord.get("EGVTXT")));
+        record.put("VDSC", String.valueOf(fgRecord.get("EGVDSC")));//Yael 04/11/2025
         found[0] = true;
       }
     });
@@ -219,9 +225,9 @@ public class lstSupplierTrns extends ExtendM3Transaction {
   }
 
   private void joinWithFPLEDX(Map<String, String> record, String cono, String pexn) {
-    if (!"50".equals(record.get("TRCD"))) {
+    /*if (!"50".equals(record.get("TRCD"))) {
       return;
-    }
+    }*///Yael. 06.11.2025
     String divi = record.get("DIVI");
     String yea4 = record.get("YEA4");
     String jrno = record.get("JRNO");
@@ -240,7 +246,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
       .build();
     DBContainer fpledxContainer = fpledxQuery.getContainer();
     fpledxQuery.readAll(fpledxContainer, 0, { DBContainer xRecord ->
-      String pexi = String.valueOf(xRecord.get("EPPEXI"));
+      String pexi = String.valueOf(xRecord.get("EPPEXI")).trim();//Yael add trim(). 06.11.2025
       if ("409".equals(pexn)) {
         if (pexi.length() > 10) {
           record.put("RMSV", pexi.substring(pexi.length() - 10));
@@ -255,6 +261,12 @@ public class lstSupplierTrns extends ExtendM3Transaction {
         } else {
           record.put("RMSV", pexi);
         }
+      }else if("404".equals(pexn)){//Yael 04/11/2025.
+         if (pexi.length() > 10) {
+           record.put("CHKN", pexi.substring(pexi.length() - 10));
+         }else{
+           record.put("CHKN", pexi);
+         }
       }
     });
   }
@@ -276,7 +288,7 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     });
   }
 
-  private void joinWithFAPCHK(Map<String, String> record, String cono) {
+  /*private void joinWithFAPCHK(Map<String, String> record, String cono) {
     String divi = record.get("DIVI");
     String vser = record.get("VSER");
     String vono = record.get("VONO");
@@ -297,9 +309,9 @@ public class lstSupplierTrns extends ExtendM3Transaction {
         record.put("CHKN", chkn);
       }
     });
-  }
+  }*///Yael 04/11/2025
   
-  private void joinWithCSYTAB(Map<String, String> record, String cono, String sunoParam) {
+  /*private void joinWithCSYTAB(Map<String, String> record, String cono, String sunoParam) {
     String feid = record.get("FEID");
     String fncn = record.get("FNCN");
     if (fncn.length() < 3) {
@@ -325,17 +337,26 @@ public class lstSupplierTrns extends ExtendM3Transaction {
             record.put("TX40", tx40);
         }
     });
-  }
+  }*///Yael 04/11/2025
 
   private void calculateDebitCredit(Map<String, String> record) {
     String dbcr = record.get("DBCR");
     String cuam = record.get("CUAM");
+    
+    // Handle nulls and parse safely
+    double cuamDouble = 0.0;
+    if (cuam != null && !cuam.isEmpty()) {
+        cuamDouble = Double.parseDouble(cuam);
+    }//Yael. 06.11.2025
+    
     if ("D".equals(dbcr)) {
-      record.put("DBIT", cuam);
+      //record.put("DBIT", cuam);
+       record.put("DBIT", String.format("%.2f", cuamDouble));//Yael. 06.11.2025
       record.put("CDIT", "0.00");
     } else if ("C".equals(dbcr)) {
       record.put("DBIT", "0.00");
-      record.put("CDIT", cuam);
+      //record.put("CDIT", cuam);
+      record.put("CDIT", String.format("%.2f", cuamDouble * -1));//Yael. 06.11.2025
     }
   }
 
@@ -402,8 +423,9 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     mi.outData.put("BLNC", record.get("BLNC"));
     mi.outData.put("ASM1", record.get("ASM1"));
     mi.outData.put("ASM2", record.get("ASM2"));
-    mi.outData.put("TX40", record.get("TX40"));
+    //mi.outData.put("TX40", record.get("TX40"));//Yael 04/11/2025
     mi.outData.put("IVDT", record.get("IVDT"));
+    mi.outData.put("VDSC", record.get("VDSC"));
     mi.write();
   }
   
