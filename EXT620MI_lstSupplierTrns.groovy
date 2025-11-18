@@ -581,7 +581,25 @@ public class lstSupplierTrns extends ExtendM3Transaction {
     String pmsv = record.get("PMSV");       
     String rmsv = record.get("RMSV");
     String originalSino = record.get("SINO"); 
-    if (chkn != null && !chkn.trim().isEmpty() && !"null".equals(chkn)) {
+    //Yael. 18/11/2025
+    String feid = record.get("FEID");
+    if(feid != "AP50" && feid != "AP10"){
+      if (chkn != null && !chkn.trim().isEmpty() && !"null".equals(chkn)) {
+          record.put("ASM1", stripLeadingZeros(chkn));
+      }else if (rmsv != null && !rmsv.trim().isEmpty() && !"null".equals(rmsv)) {
+        record.put("ASM1", rmsv);
+      } else if (pmsv != null && !pmsv.trim().isEmpty() && !"null".equals(pmsv)) {
+        record.put("ASM1", pmsv);
+      }
+      record.put("ASM2", originalSino);
+    }else{
+      if (originalSino != null && !originalSino.trim().isEmpty() && !"null".equals(originalSino)) {
+            record.put("ASM1", originalSino);
+        } else {
+            record.put("ASM1", "");
+        }
+    }
+    /*if (chkn != null && !chkn.trim().isEmpty() && !"null".equals(chkn)) {
         record.put("ASM1", stripLeadingZeros(chkn));
         record.put("ASM2", originalSino);
     } else if (rmsv != null && !rmsv.trim().isEmpty() && !"null".equals(rmsv)) {
@@ -598,6 +616,6 @@ public class lstSupplierTrns extends ExtendM3Transaction {
             record.put("ASM1", "");
             record.put("ASM2", "");
         }
-    }
+    }*/
   }
 }
