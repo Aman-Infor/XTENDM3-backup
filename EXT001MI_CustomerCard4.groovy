@@ -134,14 +134,33 @@ public class CustomerCard4 extends ExtendM3Transaction {
             }*/
 
             if (g != null&& v!=null ) {
+            
+              //Yael 05/11/2025
+              String trcd = g.get("TRCD");
+              String feid = g.get("FEID");
+              String fncn = g.get("FNCN");
+              String ivtp = s.get("IVTP");
+              String pyrs = s.get("PYRS");
+              //
              
-              if((g.get("TRCD").equals("10") 
+              /*if((g.get("TRCD").equals("10") 
               && !s.get("IVTP").equals("AP")) 
               ||((g.get("TRCD").equals("10") 
               ||g.get("TRCD").equals("20"))
               &&g.get("FEID").equals("AB10")
               &&g.get("FNCN").equals("100")
-              /*&&condition*/)){
+              /*&&condition)){*/
+              
+              //WHERE condition
+              if(
+              ((trcd.equals("10") && !ivtp.equals("AP")) ||
+              ((trcd.equals("10") || trcd.equals("20")) && feid.equals("AB10") && fncn.equals("100")) ||
+              (feid.equals("AR20") || feid.equals("OI20")) ||
+              //Yael 05/11/2025
+              (trcd.equals("20") && (feid.equals("AP30") || feid.equals("AP32")) &&
+              (pyrs == null || pyrs.isEmpty() || pyrs.compareTo("70") < 0)) ||
+              (trcd.equals("20") && feid.startsWith("AP") && !fncn.equals("500")))
+               ) {
                 
                 Map<String, String> result = new HashMap<>();
                 result.put("CONO", s.get("CONO"));
@@ -153,7 +172,7 @@ public class CustomerCard4 extends ExtendM3Transaction {
                 result.put("ACDT", s.get("ACDT"));
                 result.put("OCDT", g.get("OCDT"));
                 
-                if(g.get("FEID").equals("AR20")||g.get("FEID").equals("OI20")){
+                if(feid.equals("AR20") || feid.equals("OI20")){
                   result.put("DBCR", g.get("DBCR"));//סכום בחובה או בזכות
                   result.put("DUDT", s.get("DUDT"));
                   result.put("CUAM", round(s.get("CUAM"), 2));
@@ -161,7 +180,7 @@ public class CustomerCard4 extends ExtendM3Transaction {
                   result.put("TCAM", round(g.get("TCAM"), 2));
                 }
                 //סכום בזכות
-                else if(g.get("FEID").equals("AR30")&&g.get("DBCR").equals("D")){
+                else if(feid.equals("AR30") && g.get("DBCR").equals("D")){
                   result.put("DBCR", "C");
                   result.put("DUDT", d.get("DUDT"));
                   result.put("CUAM", round(String.valueOf(Double.valueOf(s.get("CUAM"))*-1), 2));
@@ -176,16 +195,16 @@ public class CustomerCard4 extends ExtendM3Transaction {
                   result.put("ACAM", round(g.get("ACAM"), 2));
                   result.put("TCAM", round(g.get("TCAM"), 2));
                 }
-                result.put("IVTP", s.get("IVTP"));
-                result.put("TRCD", g.get("TRCD"));
+                result.put("IVTP", ivtp);
+                result.put("TRCD", trcd);
                 result.put("CINO", s.get("CINO"));
                 result.put("DRRN", d != null ? d.get("DRRN") : null);
                 result.put("VTXT", g.get("VTXT"));
                 result.put("ARAT", round(g.get("ARAT"), 6));
                 result.put("TCAR", round(g.get("TCAR"), 6));
-                result.put("PYRS", s.get("PYRS"));
-                result.put("FEID", g.get("FEID"));
-                result.put("FNCN", g.get("FNCN"));
+                result.put("PYRS", pyrs);
+                result.put("FEID", feid);
+                result.put("FNCN", fncn);
                 result.put("REFE", d == null ? s.get("CINO") :  d.get("DRRN"));
                 result.put("CUNM", o.get("CUNM"));
                 result.put("CUCD", s.get("CUCD"));
