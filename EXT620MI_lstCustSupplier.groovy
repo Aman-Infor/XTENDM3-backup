@@ -4,6 +4,7 @@ public class lstCustSupplier extends ExtendM3Transaction {
   private final MIAPI mi
   private final DatabaseAPI database
   private final ProgramAPI program
+  private final LoggerAPI logger
 
   // ---------------- Columns (as constants) ----------------
   private static final String[] FPLEDG_FIELDS = [
@@ -34,6 +35,9 @@ public class lstCustSupplier extends ExtendM3Transaction {
   private static final String[] OCUSMA_FIELDS = [
     "OKCONO","OKCUNO","OKCUNM"
   ]
+  private static final String[] FDRFMA_FIELDS = [
+    "DMDRRN"
+  ]
   private static final String[] CIDMAS_FIELDS = [
     "IDCONO","IDSUNO","IDSUNM"
   ]
@@ -49,10 +53,11 @@ public class lstCustSupplier extends ExtendM3Transaction {
   
   private List<Map<String,String>> allRows = []
 
-  public lstCustSupplier(MIAPI mi, DatabaseAPI database, ProgramAPI program) {
+  public lstCustSupplier(MIAPI mi, DatabaseAPI database, ProgramAPI program, LoggerAPI logger) {
     this.mi = mi
     this.database = database
     this.program = program
+    this.logger = logger
   }
 
   public void main() {
@@ -166,8 +171,11 @@ public class lstCustSupplier extends ExtendM3Transaction {
       joinFGLEDG_fromFP(r)
       joinFAPCHK(r)
       joinCSYNBV_fromVSER_AP(r)
-      joinFPLEDX(r)
+      joinFPLEDX(r, "409")
+      joinFPLEDX(r, "404")//Yael. 17.11.2025
+      joinFPLEDX(r, "406")//Yael. 19.11.2025
       joinCIDMAS(r, r.get("EPSUNO"))  // имя поставщика
+      setSupplierAsmachtaValue(r)//Yael. 20/11/2025
 
       writeRow(r, false) // AP
     })
@@ -246,14 +254,14 @@ public class lstCustSupplier extends ExtendM3Transaction {
   }
 
   // FPLEDX (EPPEXN=409 -> MASAV/PROP number)
-  void joinFPLEDX(Map<String,String> r) {
+  void joinFPLEDX(Map<String,String> r, String pexn) {
     ExpressionFactory ef = database.getExpressionFactory("FPLEDX")
     ExpressionFactory exp = ef.eq("EPCONO", r.get("EPCONO"))
       .and(ef.eq("EPDIVI", r.get("EPDIVI")))
       .and(ef.eq("EPYEA4", r.get("EPYEA4")))
       .and(ef.eq("EPJRNO", r.get("EPJRNO")))
       .and(ef.eq("EPJSNO", r.get("EPJSNO")))
-      .and(ef.eq("EPPEXN", "409"))
+      .and(ef.eq("EPPEXN", pexn))
 
     DBAction a = database.table("FPLEDX").index("00").matching(exp)
       .selection(FPLEDX_FIELDS)
@@ -263,7 +271,13 @@ public class lstCustSupplier extends ExtendM3Transaction {
     a.readAll(c, 0, 3, { DBContainer dx ->
       for (String f : FPLEDX_FIELDS) {
         Object v = dx.get(f)
-        r.put(f, v == null ? "" : v.toString())
+        if(pexn == "409"){//Yael. 17/11/2025
+          r.put(f, v == null ? "" : v.toString().trim())
+        }else if(pexn == "404"){//Yael. 17/11/2025
+           r.put(f + "404", v == null ? "" : v.toString().trim())//Yael. 17/11/2025
+        }else if(pexn == "406"){//Yael. 17/11/2025
+           r.put(f + "406", v == null ? "" : v.toString().trim())//Yael. 17/11/2025
+        }
       }
     })
   }
@@ -319,6 +333,8 @@ public class lstCustSupplier extends ExtendM3Transaction {
       joinFGLEDG_fromFS(r)
       joinCSYNBV_fromVSER_AR(r)
       joinOCUSMA(r, r.get("ESPYNO"))  // имя клиента
+      joinFDRFMA(r, r.get("ESCINO"))//Yael. 20/11/2025
+      setCustomerAsmachtaValue(r)//Yael. 20/11/2025
       // joinFSLEDX_one(r, "213", "CUST_CK")
       // joinFSLEDX_one(r, "214", "C_S_CK")
       // joinFSLEDX_one(r, "215", "BANK_PAGE")
@@ -395,6 +411,27 @@ public class lstCustSupplier extends ExtendM3Transaction {
       }
     })
   }
+  
+   // FDRFMA join for drrn
+  void joinFDRFMA(Map<String,String> r, String cino) {
+    if (isEmpty(cino)) return
+    
+    ExpressionFactory ef = database.getExpressionFactory("FDRFMA")
+    ExpressionFactory exp = ef.eq("DMCONO", String.valueOf(CONO))
+      .and(ef.eq("DMDIVI", DIVI)).and(ef.eq("DMCINO", cino))
+    
+    DBAction a = database.table("FDRFMA").index("00").matching(exp)
+      .selection(FDRFMA_FIELDS)
+      .build()
+    DBContainer c = a.getContainer()
+    
+    a.readAll(c, 0, 1, { DBContainer oc ->
+      for (String f : FDRFMA_FIELDS) {
+        Object v = oc.get(f)
+        r.put(f, v == null ? "" : v.toString())
+      }
+    })
+  }
 
   // FSLEDX reader for one SEXN -> write into outKey
   void joinFSLEDX_one(Map<String,String> r, String sexn, String outKey) {
@@ -452,7 +489,8 @@ public class lstCustSupplier extends ExtendM3Transaction {
     outputRow.put("VTXT", nz(r.get("EGVTXT")))
     
     // Checks / bank / proposal
-    outputRow.put("CHKN", nz(r.get("CKCHKN")))
+    //outputRow.put("CHKN", nz(r.get("CKCHKN")))
+    outputRow.put("CHKN", nz(r.get("EPPEXI404")))//Yael. 17/11/2025
     outputRow.put("CCHK", nz(r.get("CUST_CK")))
     outputRow.put("SCCK", nz(r.get("C_S_CK")))
     outputRow.put("BNKP", nz(r.get("BANK_PAGE")))
@@ -483,7 +521,16 @@ public class lstCustSupplier extends ExtendM3Transaction {
     
     running += (debit - credit)
     outputRow.put("RUNB", formatAmount(running))
+    //Yael. 19.11.2025
+    /*if(isAR){
+      
+    }else{
+      setSupplierAsmachtaValue(r);
+    }*/
     
+    outputRow.put("ASM1", r.get("ASM1"))
+    outputRow.put("ASM2", r.get("ASM2"))
+    //
     // Добавляем в список вместо mi.write()
     allRows.add(outputRow)
 }
@@ -495,6 +542,8 @@ public class lstCustSupplier extends ExtendM3Transaction {
       
       // Пересчитываем running balance после сортировки
       running = opening
+      double totalDebt = opening//Yael. 16/11/2025
+      double totalCred = opening//Yael. 16/11/2025
       Map<String, String> openingBalance = [RUNB: opening.toString(), ACDT: allRows[0].ACDT]
       Map<String, String> closingBalance = [RUNB: allRows[-1].RUNB, ACDT: allRows[-1].ACDT]
     	
@@ -503,14 +552,23 @@ public class lstCustSupplier extends ExtendM3Transaction {
     	
       allRows.eachWithIndex { row, index ->
           // Пропускаем расчет для первой (0) и последней строки
-          if (index != 0 && index != allRows.size() - 1) {
-              double debt = toDouble(row.DEBT)
-              double cred = toDouble(row.CRED)
+          double debt = toDouble(row.DEBT)
+          double cred = toDouble(row.CRED)
+          
+          int last = allRows.size() - 1
+          
+          if (index != 0 && index != last) {
               
+              totalDebt += debt//Yael. 16/11/2025
+              totalCred += cred//Yael. 16/11/2025
               running += (debt - cred)
               row.put("RUNB", formatAmount(running))
           } else {
               // Для первой и последней строки просто ставим текущий running
+              if(index == last){//Yael. 16/11/2025
+                row.put("DEBT", formatAmount(totalDebt))//Yael. 16/11/2025
+                row.put("CRED", formatAmount(totalCred))//Yael. 16/11/2025
+              }
               row.put("RUNB", formatAmount(running))
           }
           
@@ -524,6 +582,7 @@ public class lstCustSupplier extends ExtendM3Transaction {
       // Очищаем список
       allRows.clear()
   }
+
 
   // ---------------- Helpers ----------------
   private String s(Object o) { return o == null ? "" : o.toString().trim() }
@@ -564,6 +623,55 @@ public class lstCustSupplier extends ExtendM3Transaction {
   private String formatAmount(double d) {
     long li = (long) d
     if (Math.abs(d - li) < 0.0000001d) return String.valueOf(li)
-    return String.valueOf(d)
+     // Otherwise return with 2 decimals
+    return String.format("%.2f", d);
+  }
+  
+  private void setSupplierAsmachtaValue(Map<String, String> r) {//Yael. 19.11/2025
+    String chkn = r.get("EPPEXI404")
+    String pmsv = r.get("EPPEXI406")
+    String rmsv = r.get("EPPEXI")//409
+    String originalSino = r.get("EPSINO")
+    String feid = r.get("EGFEID")
+    if(feid != "AP50" && feid != "AP10"){
+      if (chkn != null && !chkn.trim().isEmpty() && !"null".equals(chkn)) {
+          chkn = chkn.length() > 10 ? chkn.substring(chkn.length() - 10) : chkn
+          r.put("ASM1", stripLeadingZeros(chkn))
+      }else if (rmsv != null && !rmsv.trim().isEmpty() && !"null".equals(rmsv)) {
+        rmsv = rmsv.length() > 10 ? rmsv.substring(rmsv.length() - 10) : rmsv
+        r.put("ASM1", rmsv)
+      } else if (pmsv != null && !pmsv.trim().isEmpty() && !"null".equals(pmsv)) {
+        pmsv = pmsv.length() > 10 ? pmsv.substring(pmsv.length() - 10) : pmsv
+        r.put("ASM1", pmsv)
+      }
+      r.put("ASM2", originalSino)
+    }else{
+      if (originalSino != null && !originalSino.trim().isEmpty() && !"null".equals(originalSino)) {
+            r.put("ASM1", originalSino)
+        } else {
+            r.put("ASM1", "")
+        }
+    }
+	}
+	
+	private void setCustomerAsmachtaValue(Map<String, String> r) {//Yael. 19.11/2025
+    String ddrn = r.get("DMDRRN")
+    String originalCino = r.get("ESCINO")
+    String feid = r.get("EGFEID")
+    if(feid == "AR20" && feid == "OI20"){
+      r.put("ASM1", originalCino);
+    }else if(feid == "AR30" && feid == "AB10"){
+      if(ddrn != null && !ddrn.trim().isEmpty() && !"null".equals(ddrn)){
+        r.put("ASM1", ddrn)
+        r.put("ASM2", originalCino)
+      }
+    }else{
+      r.put("ASM1", originalCino)
+    }
+	}
+	
+	 private String stripLeadingZeros(String value) {
+    if (value == null) return null
+    return value.replaceFirst('^0+(?!$)', '')
   }
 }
