@@ -209,6 +209,7 @@ public class CustomerCard4 extends ExtendM3Transaction {
                 result.put("CUNM", o.get("CUNM"));
                 result.put("CUCD", s.get("CUCD"));
                 result.put("PYNM", p.get("CUNM"));
+                result.put("VDSC", g.get("VDSC"));//Yael. 01/12/2025
                 
                 resultList.add(result);
               
@@ -430,6 +431,7 @@ public class CustomerCard4 extends ExtendM3Transaction {
       mi.outData.put("CUCD", curLine.get("CUCD"));
       // mi.outData.put("PYNM", isPayer&&!isFromCust&&!sumLineName.equals("")?curLine.get("PYNM"):"");
       mi.outData.put("PYNM", isPayer&&!isFromCust&&!sumLineName.equals("")?(curLine.get("PYNM") != null ? curLine.get("PYNM") : ""):"");
+      mi.outData.put("VDSC", curLine.get("VDSC"));//Yael. 01/10/2025
       mi.write();
     }
     
@@ -491,7 +493,7 @@ public class CustomerCard4 extends ExtendM3Transaction {
     DBAction queryFGLEDG = database.table("FGLEDG")
       .index("00")
       .matching(expressionFGLEDG)
-      .selection("EGOCDT", "EGTRCD", "EGVTXT", "EGACAM", "EGARAT","EGTCAM","EGTCAR","EGCONO","EGDIVI","EGYEA4","EGJRNO","EGJSNO","EGFNCN","EGFEID","EGDBCR")
+      .selection("EGOCDT", "EGTRCD", "EGVTXT", "EGACAM", "EGARAT","EGTCAM","EGTCAR","EGCONO","EGDIVI","EGYEA4","EGJRNO","EGJSNO","EGFNCN","EGFEID","EGDBCR", "EGVDSC")
       .build();
     DBContainer containerFGLEDG = queryFGLEDG.getContainer();
     queryFGLEDG.readAll(containerFGLEDG, nrOfKeys, nrOfRecords, callbackFGLEDG)
@@ -589,6 +591,7 @@ public class CustomerCard4 extends ExtendM3Transaction {
     curRow.put("FNCN",container.get("EGFNCN")==null?"":container.get("EGFNCN").toString().trim());
     curRow.put("FEID",container.get("EGFEID")==null?"":container.get("EGFEID").toString().trim());
     curRow.put("DBCR",container.get("EGDBCR")==null?"":container.get("EGDBCR").toString().trim());
+    curRow.put("VDSC",container.get("EGVDSC")==null?"":container.get("EGVDSC").toString().trim());//Yael. 01/12/2025
     fgledgList.add(curRow);
   }
   
